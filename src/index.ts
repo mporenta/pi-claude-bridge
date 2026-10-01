@@ -1831,12 +1831,16 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 	let promptCapture: PromptCapture | undefined;
 	let systemPromptAppend: string | undefined;
 	try {
-		promptCapture = promptCaptures.resolveOrDerive(context.systemPrompt);
-		systemPromptAppend = promptCapture
-			? projectPromptCapture(promptCapture, {
-				skillReadTool: mcpTools.some((tool) => tool.name === "read") ? "mcp" : "none",
-			})
-			: undefined;
+		if (providerSettings.systemPrompt === "pi") {
+			systemPromptAppend = context.systemPrompt;
+		} else {
+			promptCapture = promptCaptures.resolveOrDerive(context.systemPrompt);
+			systemPromptAppend = promptCapture
+				? projectPromptCapture(promptCapture, {
+					skillReadTool: mcpTools.some((tool) => tool.name === "read") ? "mcp" : "none",
+				})
+				: undefined;
+		}
 	} catch (err) {
 		// resolveOrDerive and projectPromptCapture throw to stop a turn that would lose
 		// its instructions or leak pi's harness text. Report it on the stream, as pi-ai's
@@ -1990,10 +1994,12 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 			claudeMdExcludes: CLAUDE_MD_EXCLUDES,
 			includeGitInstructions: false,
 		},
-		systemPrompt: {
-			type: "preset", preset: "claude_code",
-			append: systemPromptAppend ? systemPromptAppend : undefined,
-		},
+		systemPrompt: providerSettings.systemPrompt === "pi"
+			? { type: "custom", prompt: systemPromptAppend ?? "", snapshot: false }
+			: {
+				type: "preset", preset: "claude_code",
+				append: systemPromptAppend ? systemPromptAppend : undefined,
+			},
 		extraArgs,
 		...(effort ? { effort } : {}),
 		...(mcpServers ? { mcpServers } : {}),
@@ -2210,7 +2216,8 @@ async function promptAndWait(
 	// miss would cost, so where it costs nothing — skills switched off, or no reader
 	// to open a skill file with — an unrelated miss must not fail the call.
 	const skillReadTool = disallowedTools.includes("Read") ? "none" : "native";
-	const skillCapture = options?.appendSkills !== false && skillReadTool !== "none"
+	const piPromptEnabled = providerSettings.systemPrompt === "pi";
+	const skillCapture = !piPromptEnabled && options?.appendSkills !== false && skillReadTool !== "none"
 		? promptCaptures.resolveOrDerive(options?.systemPrompt)
 		: undefined;
 	const skillsBlock = skillCapture
@@ -2249,10 +2256,9 @@ async function promptAndWait(
 			skills: [],
 			...(disallowedTools.length ? { disallowedTools } : {}),
 			...(effort ? { effort } : {}),
-			// Preset unconditionally: omitting it leaves the child on the SDK's bare default,
-			// without the tool and permission guidance the bridge relies on everywhere else.
-			// Whether pi has skills to append is unrelated to whether the child needs that.
-			systemPrompt: { type: "preset", preset: "claude_code", append: skillsBlock },
+			systemPrompt: piPromptEnabled
+				? { type: "custom", prompt: options?.systemPrompt ?? "", snapshot: false }
+				: { type: "preset", preset: "claude_code", append: skillsBlock },
 			settingSources: ["user", "project"] as SettingSource[],
 			extraArgs,
 			...(resumeSessionId ? { resume: resumeSessionId } : {}),

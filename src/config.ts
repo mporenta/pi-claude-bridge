@@ -6,7 +6,7 @@
 
 import { CONFIG_DIR_NAME, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { dirname, join } from "path";
+import { dirname, join, resolve } from "path";
 
 export interface Config {
 	/** Date (YYYY-MM-DD) the one-time startup notice was shown. Written by the extension, not the user. */
@@ -23,6 +23,8 @@ export interface Config {
 	};
 	/** Low-level Claude Agent SDK plumbing. Most users won't need these. */
 	provider?: {
+		/** Use Pi's assembled system prompt instead of the Claude Code preset. */
+		systemPrompt?: "claude_code" | "pi";
 		strictMcpConfig?: boolean;
 		autoMemoryEnabled?: boolean;
 		pathToClaudeCodeExecutable?: string;
@@ -81,12 +83,27 @@ export function markStartupNoticeShown(): string {
 	return path;
 }
 
+function settingsConfig(cwd: string): Partial<Config> {
+	for (let dir = resolve(cwd); ; dir = dirname(dir)) {
+		for (const path of [join(dir, CONFIG_DIR_NAME, "agent", "settings.json"), join(dir, CONFIG_DIR_NAME, "settings.json")]) {
+			if (existsSync(path)) {
+				const settings = tryParseJson(path) as { claudeBridge?: Partial<Config> };
+				return settings.claudeBridge ?? {};
+			}
+		}
+		if (dirname(dir) === dir) break;
+	}
+	const settings = tryParseJson(join(getAgentDir(), "settings.json")) as { claudeBridge?: Partial<Config> };
+	return settings.claudeBridge ?? {};
+}
+
 export function loadConfig(cwd: string): Config {
 	const global = tryParseJson(globalConfigPath());
 	const project = tryParseJson(join(cwd, CONFIG_DIR_NAME, "claude-bridge.json"));
+	const settings = settingsConfig(cwd);
 	return {
 		startupNoticeShown: project.startupNoticeShown ?? global.startupNoticeShown,
 		askClaude: { ...global.askClaude, ...project.askClaude },
-		provider: { ...global.provider, ...project.provider },
+		provider: { ...global.provider, ...project.provider, ...settings.provider },
 	};
 }

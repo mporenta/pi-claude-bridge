@@ -1,5 +1,9 @@
 # Changelog
 
+## UNRELEASED
+
+- **Add: Pi SDK system prompt** — Set `claudeBridge.provider.systemPrompt` to `"pi"` in the nearest `.pi/agent/settings.json` or `.pi/settings.json` to pass Pi's assembled default prompt, loaded context, skills, and appended instructions to both the provider and AskClaude instead of the Claude Code preset.
+
 ## 0.9.1 — 2026-09-30
 
 - **Bump: Claude Sonnet 5.5 and pi-ai 0.99.1** — pi-ai update brings `claude-sonnet-5-5` with 1M context. Agent SDK now requires `^0.3.284`.
